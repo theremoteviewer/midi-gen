@@ -6,6 +6,8 @@ except ImportError:
     pass
 
 import sys
+import platformdirs
+import json
 sys.modules['rtmidi'] = rtmidi
 
 try:
@@ -83,6 +85,145 @@ def get_resource_path(rel_path):
     try: base_path = sys._MEIPASS
     except Exception: base_path = os.path.abspath(".")
     return os.path.join(base_path, rel_path)
+
+CONFIG_DIR = platformdirs.user_config_dir("midigen", "the_passenger")
+CONFIG_FILE = os.path.join(CONFIG_DIR, "settings.json")
+
+def save_settings():
+    try:
+        if not os.path.exists(CONFIG_DIR):
+            os.makedirs(CONFIG_DIR)
+        
+        settings = {
+            "style_var": style_var.get(),
+            "root_var": root_var.get(),
+            "scale_var": scale_var.get(),
+            "length_var": length_var.get(),
+            "algo_var": algo_var.get(),
+            "melody_ch_var": melody_ch_var.get(),
+            "harmony_ch_var": harmony_ch_var.get(),
+            "chord_ch_var": chord_ch_var.get(),
+            "bass_ch_var": bass_ch_var.get(),
+            "harm_var": harm_var.get(),
+            "chord_style_var": chord_style_var.get(),
+            "digitone_shape_var": digitone_shape_var.get(),
+            "chord_rhythm_var": chord_rhythm_var.get(),
+            "chord_oct_var": chord_oct_var.get(),
+            "bass_pat_var": bass_pat_var.get(),
+            "bass_rhythm_var": bass_rhythm_var.get(),
+            "midi_out_var": midi_out_var.get(),
+            "midi_in_var": midi_in_var.get(),
+            "sync_var": sync_var.get(),
+            "workflow_var": workflow_var.get(),
+            "lock_notes_var": lock_notes_var.get(),
+            "fs_enabled_var": fs_enabled_var.get(),
+            "sf_path_vars": [v.get() for v in sf_path_vars],
+            "tempo_slider": tempo_slider.get(),
+            "complexity_slider": complexity_slider.get(),
+            "vel_slider": vel_slider.get(),
+            "feel_slider": feel_slider.get(),
+            "mel_gate_slider": mel_gate_slider.get(),
+            "hrm_gate_slider": hrm_gate_slider.get(),
+            "strum_slider": strum_slider.get(),
+            "chord_gate_slider": chord_gate_slider.get(),
+            "bass_comp_slider": bass_comp_slider.get(),
+            "bas_gate_slider": bas_gate_slider.get(),
+            "key_states": {str(k): v.get() for k, v in key_states.items()},
+            "mute_mel_var": mute_mel_var.get(),
+            "solo_mel_var": solo_mel_var.get(),
+            "mute_hrm_var": mute_hrm_var.get(),
+            "solo_hrm_var": solo_hrm_var.get(),
+            "mute_chd_var": mute_chd_var.get(),
+            "solo_chd_var": solo_chd_var.get(),
+            "mute_bas_var": mute_bas_var.get(),
+            "solo_bas_var": solo_bas_var.get()
+        }
+        
+        with open(CONFIG_FILE, 'w') as f:
+            json.dump(settings, f, indent=4)
+
+        print(f"Saved settings to {CONFIG_FILE}")
+    except Exception as e:
+        print(f"Failed to save settings: {e}")
+
+def load_settings():
+    try:
+        if not os.path.exists(CONFIG_FILE):
+            return
+        
+        with open(CONFIG_FILE, 'r') as f:
+            settings = json.load(f)
+            
+        if "style_var" in settings: style_var.set(settings["style_var"])
+        if "root_var" in settings: root_var.set(settings["root_var"])
+        if "scale_var" in settings: scale_var.set(settings["scale_var"])
+        if "length_var" in settings: length_var.set(settings["length_var"])
+        if "algo_var" in settings: algo_var.set(settings["algo_var"])
+        if "melody_ch_var" in settings: melody_ch_var.set(settings["melody_ch_var"])
+        if "harmony_ch_var" in settings: harmony_ch_var.set(settings["harmony_ch_var"])
+        if "chord_ch_var" in settings: chord_ch_var.set(settings["chord_ch_var"])
+        if "bass_ch_var" in settings: bass_ch_var.set(settings["bass_ch_var"])
+        if "harm_var" in settings: harm_var.set(settings["harm_var"])
+        if "chord_style_var" in settings: chord_style_var.set(settings["chord_style_var"])
+        if "digitone_shape_var" in settings: digitone_shape_var.set(settings["digitone_shape_var"])
+        if "chord_rhythm_var" in settings: chord_rhythm_var.set(settings["chord_rhythm_var"])
+        if "chord_oct_var" in settings: chord_oct_var.set(settings["chord_oct_var"])
+        if "bass_pat_var" in settings: bass_pat_var.set(settings["bass_pat_var"])
+        if "bass_rhythm_var" in settings: bass_rhythm_var.set(settings["bass_rhythm_var"])
+        if "midi_out_var" in settings: midi_out_var.set(settings["midi_out_var"])
+        if "midi_in_var" in settings: midi_in_var.set(settings["midi_in_var"])
+        if "sync_var" in settings: sync_var.set(settings["sync_var"])
+        if "workflow_var" in settings: workflow_var.set(settings["workflow_var"])
+        if "lock_notes_var" in settings: lock_notes_var.set(settings["lock_notes_var"])
+        if "fs_enabled_var" in settings: fs_enabled_var.set(settings["fs_enabled_var"])
+        
+        if "sf_path_vars" in settings:
+            for i, val in enumerate(settings["sf_path_vars"]):
+                if i < len(sf_path_vars): sf_path_vars[i].set(val)
+        
+        if "tempo_slider" in settings: tempo_slider.set(settings["tempo_slider"])
+        if "complexity_slider" in settings: complexity_slider.set(settings["complexity_slider"])
+        if "vel_slider" in settings: vel_slider.set(settings["vel_slider"])
+        if "feel_slider" in settings: feel_slider.set(settings["feel_slider"])
+        if "mel_gate_slider" in settings: mel_gate_slider.set(settings["mel_gate_slider"])
+        if "hrm_gate_slider" in settings: hrm_gate_slider.set(settings["hrm_gate_slider"])
+        if "strum_slider" in settings: strum_slider.set(settings["strum_slider"])
+        if "chord_gate_slider" in settings: chord_gate_slider.set(settings["chord_gate_slider"])
+        if "bass_comp_slider" in settings: bass_comp_slider.set(settings["bass_comp_slider"])
+        if "bas_gate_slider" in settings: bas_gate_slider.set(settings["bas_gate_slider"])
+        
+        if "key_states" in settings:
+            for k, v in settings["key_states"].items():
+                if int(k) in key_states: key_states[int(k)].set(v)
+                
+        if "mute_mel_var" in settings: mute_mel_var.set(settings["mute_mel_var"])
+        if "solo_mel_var" in settings: solo_mel_var.set(settings["solo_mel_var"])
+        if "mute_hrm_var" in settings: mute_hrm_var.set(settings["mute_hrm_var"])
+        if "solo_hrm_var" in settings: solo_hrm_var.set(settings["solo_hrm_var"])
+        if "mute_chd_var" in settings: mute_chd_var.set(settings["mute_chd_var"])
+        if "solo_chd_var" in settings: solo_chd_var.set(settings["solo_chd_var"])
+        if "mute_bas_var" in settings: mute_bas_var.set(settings["mute_bas_var"])
+        if "solo_bas_var" in settings: solo_bas_var.set(settings["solo_bas_var"])
+        
+        # Update M/S buttons based on loaded variables
+        def update_ms_btn(var, btn, active_color):
+             if var.get(): btn.config(bg=active_color)
+             else: btn.config(bg="#555555")
+
+        update_ms_btn(mute_mel_var, btn_mute_mel, "#FF0000")
+        update_ms_btn(solo_mel_var, btn_solo_mel, "#9C27B0")
+        update_ms_btn(mute_hrm_var, btn_mute_hrm, "#FF0000")
+        update_ms_btn(solo_hrm_var, btn_solo_hrm, "#9C27B0")
+        update_ms_btn(mute_chd_var, btn_mute_chd, "#FF0000")
+        update_ms_btn(solo_chd_var, btn_solo_chd, "#9C27B0")
+        update_ms_btn(mute_bas_var, btn_mute_bas, "#FF0000")
+        update_ms_btn(solo_bas_var, btn_solo_bas, "#9C27B0")
+
+        if fs_enabled_var.get():
+            app.after(1000, toggle_fluidsynth)
+
+    except Exception as e:
+        print(f"Failed to load settings: {e}")
 
 # ==========================================
 # PHASE 2: ROOT APP & CANVAS SETUP
@@ -1033,6 +1174,8 @@ def on_sync_change(*args):
 def on_closing():
     global is_playing, fs_instance
     is_playing = False
+
+    save_settings()
     panic_action()
     if fs_instance:
         try:
@@ -1308,6 +1451,7 @@ status_label.pack(anchor="w", pady=(5,0))
 # PHASE 6: BINDINGS & EVENT LISTENERS
 # ==========================================
 app.protocol("WM_DELETE_WINDOW", on_closing)
+app.createcommand("tk::mac::Quit", on_closing)  # Handle Cmd+Q on macOS
 
 app.bind_all("<space>", handle_spacebar)
 app.bind_class("TCombobox", "<space>", handle_spacebar)
@@ -1352,6 +1496,7 @@ for i in range(matrix_density_canvas):
 draw_piano_keyboard()
 on_composer_change()
 refresh_midi_ports()
+load_settings()
 generate_action(force_new=True)
 
 app.after(50, update_visualizer)
