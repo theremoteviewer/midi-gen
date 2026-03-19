@@ -1,18 +1,31 @@
+try:
+    import rtmidi
+except ImportError:
+    import rtmidi2 as rtmidi
+except ImportError:
+    pass
+
+import sys
+sys.modules['rtmidi'] = rtmidi
+
+try:
+    import fluidsynth
+    FLUIDSYNTH_AVAILABLE = True
+except ImportError:
+    FLUIDSYNTH_AVAILABLE = False
+
 import tkinter as tk
-from tkinter import ttk, messagebox
+from tkinter import ttk, messagebox, filedialog
 import mido
 import random
 import os
-import sys
 import threading
 import time
 import shutil
 import queue
 
 # --- Force PyInstaller to bundle the actual driver ---
-try: import rtmidi
-except ImportError: pass
-mido.set_backend('mido.backends.rtmidi')
+mido.set_backend('mido.backends.portmidi')
 
 # ==========================================
 # PHASE 1: CONSTANTS & DICTIONARIES
@@ -127,6 +140,11 @@ bass_pat_var, bass_rhythm_var = tk.StringVar(value="Regular"), tk.StringVar(valu
 midi_out_var, midi_in_var = tk.StringVar(), tk.StringVar()
 sync_var, ext_bpm_var = tk.StringVar(value="Internal"), tk.StringVar(value="EXT BPM: ---")
 workflow_var, lock_notes_var = tk.StringVar(value="Instant"), tk.BooleanVar(value=True)
+
+# FluidSynth Variables
+fs_enabled_var = tk.BooleanVar(value=False)
+sf_path_var = tk.StringVar(value="Select SoundFont...")
+fs_instance = None
 
 # ==========================================
 # PHASE 4: LOGIC & GENERATOR FUNCTIONS
@@ -435,6 +453,13 @@ def update_status(text, color):
 
 def panic_action():
     update_status("PANIC: KILLING ALL NOTES...", "#FF0000")
+    if fs_enabled_var.get() and fs_instance:
+        try:
+            for ch in range(16):
+                fs_instance.cc(ch, 123, 0)
+                fs_instance.cc(ch, 120, 0)
+        except: pass
+
     out_port_name = midi_out_var.get()
     if not out_port_name or out_port_name == "No Output Devices": return
     def kill_notes():
@@ -528,7 +553,21 @@ def play_live_thread(file_a, file_b, out_port_name, in_port_name, sync_mode):
                     target_ticks = int(length_var.get().split()[0]) * 1920
                     while event_index < len(active_events) and active_events[event_index][0] <= play_tick:
                         processed_msg = process_message(active_events[event_index][1])
-                        if processed_msg: out_port.send(processed_msg)
+                        if processed_msg:
+                            out_port.send(processed_msg)
+                            if fs_enabled_var.get() and fs_instance:
+                                try:
+                                    if processed_msg.type == 'note_on':
+                                        fs_instance.noteon(processed_msg.channel, processed_msg.note, processed_msg.velocity)
+                                    elif processed_msg.type == 'note_off':
+                                        fs_instance.noteoff(processed_msg.channel, processed_msg.note)
+                                    elif processed_msg.type == 'control_change':
+                                        fs_instance.cc(processed_msg.channel, processed_msg.control, processed_msg.value)
+                                    elif processed_msg.type == 'program_change':
+                                        fs_instance.program_change(processed_msg.channel, processed_msg.program)
+                                    elif processed_msg.type == 'pitchwheel':
+                                        fs_instance.pitch_bend(processed_msg.channel, processed_msg.pitch)
+                                except: pass
                         event_index += 1
 
                     play_tick += ticks_per_pulse
@@ -537,7 +576,21 @@ def play_live_thread(file_a, file_b, out_port_name, in_port_name, sync_mode):
                     if play_tick >= target_ticks:
                         while event_index < len(active_events) and active_events[event_index][0] <= target_ticks:
                             processed_msg = process_message(active_events[event_index][1])
-                            if processed_msg: out_port.send(processed_msg)
+                            if processed_msg:
+                                out_port.send(processed_msg)
+                                if fs_enabled_var.get() and fs_instance:
+                                    try:
+                                        if processed_msg.type == 'note_on':
+                                            fs_instance.noteon(processed_msg.channel, processed_msg.note, processed_msg.velocity)
+                                        elif processed_msg.type == 'note_off':
+                                            fs_instance.noteoff(processed_msg.channel, processed_msg.note)
+                                        elif processed_msg.type == 'control_change':
+                                            fs_instance.cc(processed_msg.channel, processed_msg.control, processed_msg.value)
+                                        elif processed_msg.type == 'program_change':
+                                            fs_instance.program_change(processed_msg.channel, processed_msg.program)
+                                        elif processed_msg.type == 'pitchwheel':
+                                            fs_instance.pitch_bend(processed_msg.channel, processed_msg.pitch)
+                                    except: pass
                             event_index += 1
                         if reload_staged:
                             events_A, _ = extract_events(file_a)
@@ -599,7 +652,21 @@ def play_live_thread(file_a, file_b, out_port_name, in_port_name, sync_mode):
                             target_ticks = int(length_var.get().split()[0]) * 1920
                             while event_index < len(active_events) and active_events[event_index][0] <= play_tick:
                                 processed_msg = process_message(active_events[event_index][1])
-                                if processed_msg: out_port.send(processed_msg)
+                                if processed_msg:
+                                    out_port.send(processed_msg)
+                                    if fs_enabled_var.get() and fs_instance:
+                                        try:
+                                            if processed_msg.type == 'note_on':
+                                                fs_instance.noteon(processed_msg.channel, processed_msg.note, processed_msg.velocity)
+                                            elif processed_msg.type == 'note_off':
+                                                fs_instance.noteoff(processed_msg.channel, processed_msg.note)
+                                            elif processed_msg.type == 'control_change':
+                                                fs_instance.cc(processed_msg.channel, processed_msg.control, processed_msg.value)
+                                            elif processed_msg.type == 'program_change':
+                                                fs_instance.program_change(processed_msg.channel, processed_msg.program)
+                                            elif processed_msg.type == 'pitchwheel':
+                                                fs_instance.pitch_bend(processed_msg.channel, processed_msg.pitch)
+                                        except: pass
                                 event_index += 1
                                 
                             play_tick += ticks_per_pulse
@@ -607,7 +674,21 @@ def play_live_thread(file_a, file_b, out_port_name, in_port_name, sync_mode):
                             if play_tick >= target_ticks:
                                 while event_index < len(active_events) and active_events[event_index][0] <= target_ticks:
                                     processed_msg = process_message(active_events[event_index][1])
-                                    if processed_msg: out_port.send(processed_msg)
+                                    if processed_msg:
+                                        out_port.send(processed_msg)
+                                        if fs_enabled_var.get() and fs_instance:
+                                            try:
+                                                if processed_msg.type == 'note_on':
+                                                    fs_instance.noteon(processed_msg.channel, processed_msg.note, processed_msg.velocity)
+                                                elif processed_msg.type == 'note_off':
+                                                    fs_instance.noteoff(processed_msg.channel, processed_msg.note)
+                                                elif processed_msg.type == 'control_change':
+                                                    fs_instance.cc(processed_msg.channel, processed_msg.control, processed_msg.value)
+                                                elif processed_msg.type == 'program_change':
+                                                    fs_instance.program_change(processed_msg.channel, processed_msg.program)
+                                                elif processed_msg.type == 'pitchwheel':
+                                                    fs_instance.pitch_bend(processed_msg.channel, processed_msg.pitch)
+                                            except: pass
                                     event_index += 1
                                 if reload_staged:
                                     events_A, _ = extract_events(file_a)
@@ -949,10 +1030,62 @@ def on_sync_change(*args):
         if sync_var.get() == "External": play_action()
 
 def on_closing():
-    global is_playing
+    global is_playing, fs_instance
     is_playing = False
     panic_action()
-    app.after(500, app.destroy) 
+    if fs_instance:
+        try:
+            fs_instance.delete()
+            fs_instance = None
+        except: pass
+    app.after(500, app.destroy)
+
+def init_fluidsynth():
+    global fs_instance
+    if not FLUIDSYNTH_AVAILABLE:
+        messagebox.showerror("FluidSynth Error", "pyfluidsynth not installed")
+        fs_enabled_var.set(False)
+        return
+    
+    sf_path = sf_path_var.get()
+    if not os.path.exists(sf_path):
+        messagebox.showerror("FluidSynth Error", "SoundFont file not found")
+        fs_enabled_var.set(False)
+        return
+
+    try:
+        if fs_instance:
+            fs_instance.delete()
+        
+        fs_instance = fluidsynth.Synth()
+        # Default driver for macOS/Linux/Windows
+        driver = 'coreaudio' if sys.platform == 'darwin' else ('dsound' if sys.platform == 'win32' else 'alsa')
+        fs_instance.start(driver=driver)
+        
+        sfid = fs_instance.sfload(sf_path)
+        fs_instance.program_select(0, sfid, 0, 0)
+        update_status("FLUIDSYNTH READY", FG_COLOR)
+    except Exception as e:
+        messagebox.showerror("FluidSynth Error", f"Failed to initialize: {e}")
+        fs_enabled_var.set(False)
+        fs_instance = None
+
+def select_soundfont():
+    path = filedialog.askopenfilename(filetypes=[("SoundFont files", "*.sf2")])
+    if path:
+        sf_path_var.set(path)
+        if fs_enabled_var.get():
+            init_fluidsynth()
+
+def toggle_fluidsynth():
+    if fs_enabled_var.get():
+        init_fluidsynth()
+    else:
+        global fs_instance
+        if fs_instance:
+            fs_instance.delete()
+            fs_instance = None
+            update_status("FLUIDSYNTH DISABLED", "#FFC107")
 
 # ==========================================
 # PHASE 5: UI WIDGET ASSEMBLY (TWO COLUMN)
@@ -1113,6 +1246,13 @@ tk.Button(sync_routing_frame, text="REFRESH", command=refresh_midi_ports, bg="#3
 tk.Radiobutton(sync_routing_frame, text="INTERNAL CLOCK", variable=sync_var, value="Internal", bg=BG_COLOR, fg=FG_COLOR, selectcolor="black", font=FONT_MAIN, takefocus=0).grid(row=0, column=3, sticky="w", padx=10)
 tk.Radiobutton(sync_routing_frame, text="EXTERNAL CLOCK", variable=sync_var, value="External", bg=BG_COLOR, fg=FG_COLOR, selectcolor="black", font=FONT_MAIN, takefocus=0).grid(row=1, column=3, sticky="w", padx=10)
 tk.Label(sync_routing_frame, textvariable=ext_bpm_var, bg=BG_COLOR, fg="#FFC107", font=FONT_MAIN).grid(row=1, column=4, sticky="w")
+
+fs_frame = tk.Frame(main_frame, bg=BG_COLOR, bd=1, relief="solid", padx=5, pady=5)
+fs_frame.pack(fill="x", pady=5)
+tk.Checkbutton(fs_frame, text="ENABLE FLUIDSYNTH", variable=fs_enabled_var, command=toggle_fluidsynth, bg=BG_COLOR, fg="#00FFFF", selectcolor="black", font=FONT_MAIN, takefocus=0).pack(side="left", padx=10)
+make_label(fs_frame, text="SOUNDFONT:").pack(side="left")
+tk.Entry(fs_frame, textvariable=sf_path_var, font=FONT_MAIN, bg="#222222", fg="white", width=60).pack(side="left", padx=5)
+tk.Button(fs_frame, text="...", command=select_soundfont, bg="#444444", fg="white", font=FONT_MAIN, relief="flat", takefocus=0).pack(side="left", padx=2)
 
 # --- FOOTER: PLAYBACK & PIANO ROLL ---
 piano_roll_frame = tk.Frame(main_frame, bg="#111111", bd=2, relief="sunken", padx=2, pady=2)
