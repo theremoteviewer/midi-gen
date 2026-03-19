@@ -303,6 +303,7 @@ sf_dropdown_vars = [tk.StringVar(value="None") for _ in range(4)]
 available_sfs = []
 fs_instance = None
 fs_sfids = [None] * 4
+fs_popup = None
 
 # ==========================================
 # PHASE 4: LOGIC & GENERATOR FUNCTIONS
@@ -1188,11 +1189,14 @@ def on_sync_change(*args):
         if sync_var.get() == "External": play_action()
 
 def on_closing():
-    global is_playing, fs_instance
+    global is_playing, fs_instance, fs_popup
     is_playing = False
 
     save_settings()
     panic_action()
+    if fs_popup:
+        try: fs_popup.destroy()
+        except: pass
     if fs_instance:
         try:
             fs_instance.delete()
@@ -1215,10 +1219,63 @@ def refresh_soundfont_list():
         if var.get() not in available_sfs:
             var.set("None")
             
-    # Update all comboboxes
+    # Update all comboboxes if popup is open
+    if fs_popup and fs_popup.winfo_exists():
+        try:
+            for i in range(4):
+                if hasattr(fs_popup, 'sf_combos'):
+                    fs_popup.sf_combos[i]['values'] = available_sfs
+            if hasattr(fs_popup, 'sf_dir_entry'):
+                pass # Already bound to sf_dir_var
+        except: pass
+
+def show_fluidsynth_popup():
+    global fs_popup
+    if fs_popup and fs_popup.winfo_exists():
+        fs_popup.lift()
+        return
+
+    fs_popup = tk.Toplevel(app)
+    fs_popup.title("FLUIDSYNTH CONFIGURATION")
+    fs_popup.geometry("600x350")
+    fs_popup.configure(bg=BG_COLOR)
+    fs_popup.resizable(False, False)
+    
+    # Keep it on top
+    fs_popup.transient(app)
+    
+    main_p = tk.Frame(fs_popup, bg=BG_COLOR, padx=20, pady=20)
+    main_p.pack(fill="both", expand=True)
+    
+    tk.Label(main_p, text="SOUNDFONT SETTINGS", bg=BG_COLOR, fg="#00FFFF", font=("Arial", 12, "bold")).pack(pady=(0, 20))
+    
+    dir_f = tk.Frame(main_p, bg=BG_COLOR)
+    dir_f.pack(fill="x", pady=10)
+    make_label(dir_f, text="DIRECTORY:").pack(side="left")
+    fs_popup.sf_dir_entry = tk.Entry(dir_f, textvariable=sf_dir_var, font=FONT_MAIN, bg="#222222", fg="white", width=40)
+    fs_popup.sf_dir_entry.pack(side="left", padx=5)
+    tk.Button(dir_f, text="BROWSE", command=browse_sf_directory, bg="#444444", fg="white", font=FONT_MAIN, relief="flat", takefocus=0).pack(side="left")
+    
+    grid_f = tk.Frame(main_p, bg=BG_COLOR)
+    grid_f.pack(fill="x", pady=20)
+    
+    labels = ["MELODY SF2:", "HARMONY SF2:", "CHORDS SF2:", "BASS SF2:"]
+    fs_popup.sf_combos = []
+    
     for i in range(4):
-        if 'sf_combos' in globals() and sf_combos[i]:
-            sf_combos[i]['values'] = available_sfs
+        row, col = i // 2, i % 2
+        f = tk.Frame(grid_f, bg=BG_COLOR)
+        f.grid(row=row, column=col, sticky="w", padx=10, pady=5)
+        make_label(f, text=labels[i], width=12, anchor="w").pack(side="left")
+        
+        cb = ttk.Combobox(f, textvariable=sf_dropdown_vars[i], values=available_sfs, state="readonly", width=25, font=FONT_MAIN)
+        cb.pack(side="left", padx=5)
+        fs_popup.sf_combos.append(cb)
+        
+        # Reload on selection change
+        sf_dropdown_vars[i].trace_add("write", lambda *args, idx=i: [init_fluidsynth() if fs_enabled_var.get() else None])
+
+    tk.Button(main_p, text="CLOSE", command=fs_popup.destroy, bg="#333333", fg="white", font=FONT_MAIN, width=15, relief="flat").pack(pady=10)
 
 def browse_sf_directory():
     path = filedialog.askdirectory()
@@ -1274,6 +1331,7 @@ def toggle_fluidsynth():
             fs_instance.delete()
             fs_instance = None
             update_status("FLUIDSYNTH DISABLED", "#FFC107")
+
 
 # ==========================================
 # PHASE 5: UI WIDGET ASSEMBLY (TWO COLUMN)
@@ -1435,36 +1493,11 @@ tk.Radiobutton(sync_routing_frame, text="INTERNAL CLOCK", variable=sync_var, val
 tk.Radiobutton(sync_routing_frame, text="EXTERNAL CLOCK", variable=sync_var, value="External", bg=BG_COLOR, fg=FG_COLOR, selectcolor="black", font=FONT_MAIN, takefocus=0).grid(row=1, column=3, sticky="w", padx=10)
 tk.Label(sync_routing_frame, textvariable=ext_bpm_var, bg=BG_COLOR, fg="#FFC107", font=FONT_MAIN).grid(row=1, column=4, sticky="w")
 
-fs_frame = tk.LabelFrame(main_frame, text=" FLUIDSYNTH SETTINGS ", bg=BG_COLOR, fg="#00FFFF", font=FONT_TITLE, padx=10, pady=5)
-fs_frame.pack(fill="x", pady=5)
-
-fs_controls = tk.Frame(fs_frame, bg=BG_COLOR)
-fs_controls.pack(fill="x", pady=2)
-tk.Checkbutton(fs_controls, text="ENABLE FLUIDSYNTH", variable=fs_enabled_var, command=toggle_fluidsynth, bg=BG_COLOR, fg="#00FFFF", selectcolor="black", font=FONT_MAIN, takefocus=0).pack(side="left")
-
-tk.Frame(fs_controls, width=20, bg=BG_COLOR).pack(side="left")
-make_label(fs_controls, text="DIRECTORY:").pack(side="left")
-tk.Entry(fs_controls, textvariable=sf_dir_var, font=FONT_MAIN, bg="#222222", fg="white", width=50).pack(side="left", padx=5)
-tk.Button(fs_controls, text="BROWSE", command=browse_sf_directory, bg="#444444", fg="white", font=FONT_MAIN, relief="flat", takefocus=0).pack(side="left")
-
-fs_grid = tk.Frame(fs_frame, bg=BG_COLOR); fs_grid.pack(fill="x", pady=5)
-labels = ["MEL SF2:", "HRM SF2:", "CHD SF2:", "BAS SF2:"]
-sf_combos = []
-
-for i in range(4):
-    row = i // 2
-    col = i % 2
-    f = tk.Frame(fs_grid, bg=BG_COLOR); f.grid(row=row, column=col, sticky="w", padx=10, pady=2)
-    make_label(f, text=labels[i], width=8, anchor="w").pack(side="left")
-    
-    cb = ttk.Combobox(f, textvariable=sf_dropdown_vars[i], values=available_sfs, state="readonly", width=35, font=FONT_MAIN)
-    cb.pack(side="left", padx=5)
-    sf_combos.append(cb)
-    
-    # Trigger reload on selection change
-    sf_dropdown_vars[i].trace_add("write", lambda *args, idx=i: [init_fluidsynth() if fs_enabled_var.get() else None])
-
-refresh_soundfont_list()
+# FluidSynth Enable & Config
+fs_mini_f = tk.Frame(main_frame, bg=BG_COLOR)
+fs_mini_f.pack(fill="x", pady=5)
+tk.Checkbutton(fs_mini_f, text="ENABLE FLUIDSYNTH", variable=fs_enabled_var, command=toggle_fluidsynth, bg=BG_COLOR, fg="#00FFFF", selectcolor="black", font=FONT_MAIN, takefocus=0).pack(side="left")
+tk.Button(fs_mini_f, text="CONFIG", command=show_fluidsynth_popup, bg="#333333", fg="#00FFFF", font=FONT_MAIN, relief="flat", takefocus=0).pack(side="left", padx=10)
 
 # --- FOOTER: PLAYBACK & PIANO ROLL ---
 piano_roll_frame = tk.Frame(main_frame, bg="#111111", bd=2, relief="sunken", padx=2, pady=2)
