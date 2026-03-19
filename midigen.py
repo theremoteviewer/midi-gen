@@ -303,7 +303,7 @@ sf_dropdown_vars = [tk.StringVar(value="None") for _ in range(4)]
 available_sfs = []
 fs_instance = None
 fs_sfids = [None] * 4
-fs_popup = None
+config_popup = None
 
 # ==========================================
 # PHASE 4: LOGIC & GENERATOR FUNCTIONS
@@ -1173,10 +1173,29 @@ def save_action():
 def refresh_midi_ports():
     try:
         outs, ins = mido.get_output_names() or ["No Output Devices"], mido.get_input_names() or ["No Input Devices"]
-        midi_out_dropdown['values'], midi_in_dropdown['values'] = outs, ins
-        midi_out_var.set(outs[0]); midi_in_var.set(ins[0])
+        # Update popup if open
+        if config_popup and config_popup.winfo_exists():
+            try:
+                if hasattr(config_popup, 'midi_out_combo'):
+                    config_popup.midi_out_combo['values'] = outs
+                if hasattr(config_popup, 'midi_in_combo'):
+                    config_popup.midi_in_combo['values'] = ins
+            except: pass
+        
+        # Also update main UI references if they exist (though they are being removed)
+        # try:
+        #     midi_out_dropdown['values'], midi_in_dropdown['values'] = outs, ins
+        # except: pass
+
+        if not midi_out_var.get() and outs:
+            midi_out_var.set(outs[0])
+        if not midi_in_var.get() and ins:
+            midi_in_var.set(ins[0])
     except Exception as e:
-        midi_out_dropdown['values'] = midi_in_dropdown['values'] = ["Backend Error"]
+        if config_popup and config_popup.winfo_exists():
+            try:
+                config_popup.midi_out_combo['values'] = config_popup.midi_in_combo['values'] = ["Backend Error"]
+            except: pass
         midi_out_var.set("Backend Error"); midi_in_var.set("Backend Error")
         messagebox.showerror("MIDI Error", f"Could not connect to MIDI drivers:\n{e}")
 
@@ -1189,13 +1208,13 @@ def on_sync_change(*args):
         if sync_var.get() == "External": play_action()
 
 def on_closing():
-    global is_playing, fs_instance, fs_popup
+    global is_playing, fs_instance, config_popup
     is_playing = False
 
     save_settings()
     panic_action()
-    if fs_popup:
-        try: fs_popup.destroy()
+    if config_popup:
+        try: config_popup.destroy()
         except: pass
     if fs_instance:
         try:
@@ -1220,47 +1239,81 @@ def refresh_soundfont_list():
             var.set("None")
             
     # Update all comboboxes if popup is open
-    if fs_popup and fs_popup.winfo_exists():
+    if config_popup and config_popup.winfo_exists():
         try:
             for i in range(4):
-                if hasattr(fs_popup, 'sf_combos'):
-                    fs_popup.sf_combos[i]['values'] = available_sfs
-            if hasattr(fs_popup, 'sf_dir_entry'):
+                if hasattr(config_popup, 'sf_combos'):
+                    config_popup.sf_combos[i]['values'] = available_sfs
+            if hasattr(config_popup, 'sf_dir_entry'):
                 pass # Already bound to sf_dir_var
         except: pass
 
-def show_fluidsynth_popup():
-    global fs_popup
-    if fs_popup and fs_popup.winfo_exists():
-        fs_popup.lift()
+def show_config_popup():
+    global config_popup
+    if config_popup and config_popup.winfo_exists():
+        config_popup.lift()
         return
 
-    fs_popup = tk.Toplevel(app)
-    fs_popup.title("FLUIDSYNTH CONFIGURATION")
-    fs_popup.geometry("600x350")
-    fs_popup.configure(bg=BG_COLOR)
-    fs_popup.resizable(False, False)
+    config_popup = tk.Toplevel(app)
+    config_popup.title("MIDI & SYNTH CONFIGURATION")
+    config_popup.geometry("600x550")
+    config_popup.configure(bg=BG_COLOR)
+    config_popup.resizable(False, False)
     
-    # Keep it on top
-    fs_popup.transient(app)
+    config_popup.transient(app)
     
-    main_p = tk.Frame(fs_popup, bg=BG_COLOR, padx=20, pady=20)
+    main_p = tk.Frame(config_popup, bg=BG_COLOR, padx=20, pady=20)
     main_p.pack(fill="both", expand=True)
     
-    tk.Label(main_p, text="SOUNDFONT SETTINGS", bg=BG_COLOR, fg="#00FFFF", font=("Arial", 12, "bold")).pack(pady=(0, 20))
+    # --- MIDI SECTION ---
+    tk.Label(main_p, text="MIDI SETTINGS", bg=BG_COLOR, fg=FG_COLOR, font=("Arial", 12, "bold")).pack(pady=(0, 10))
+    
+    m_ports_f = tk.Frame(main_p, bg=BG_COLOR)
+    m_ports_f.pack(fill="x", pady=5)
+    
+    # MIDI OUT
+    mo_f = tk.Frame(m_ports_f, bg=BG_COLOR)
+    mo_f.pack(fill="x", pady=2)
+    make_label(mo_f, text="MIDI OUT:", width=10, anchor="w").pack(side="left")
+    config_popup.midi_out_combo = ttk.Combobox(mo_f, textvariable=midi_out_var, state="readonly", width=30, font=FONT_MAIN)
+    config_popup.midi_out_combo.pack(side="left", padx=5)
+    # Refresh button
+    tk.Button(mo_f, text="REFRESH", command=refresh_midi_ports, bg="#333333", fg=FG_COLOR, font=FONT_MAIN, relief="flat", takefocus=0).pack(side="right")
+
+    # MIDI IN
+    mi_f = tk.Frame(m_ports_f, bg=BG_COLOR)
+    mi_f.pack(fill="x", pady=2)
+    make_label(mi_f, text="MIDI IN:", width=10, anchor="w").pack(side="left")
+    config_popup.midi_in_combo = ttk.Combobox(mi_f, textvariable=midi_in_var, state="readonly", width=30, font=FONT_MAIN)
+    config_popup.midi_in_combo.pack(side="left", padx=5)
+
+    # Sync / Clock
+    sync_f = tk.Frame(main_p, bg=BG_COLOR)
+    sync_f.pack(fill="x", pady=10)
+    tk.Radiobutton(sync_f, text="INTERNAL CLOCK", variable=sync_var, value="Internal", bg=BG_COLOR, fg=FG_COLOR, selectcolor="black", font=FONT_MAIN, takefocus=0).pack(side="left")
+    tk.Radiobutton(sync_f, text="EXTERNAL CLOCK", variable=sync_var, value="External", bg=BG_COLOR, fg=FG_COLOR, selectcolor="black", font=FONT_MAIN, takefocus=0).pack(side="left", padx=20)
+    tk.Label(sync_f, textvariable=ext_bpm_var, bg=BG_COLOR, fg="#FFC107", font=FONT_MAIN).pack(side="left")
+
+    tk.Frame(main_p, bg="#444444", height=2).pack(fill="x", pady=15)
+
+    # --- FLUIDSYNTH SECTION ---
+    fs_header_f = tk.Frame(main_p, bg=BG_COLOR)
+    fs_header_f.pack(fill="x")
+    tk.Label(fs_header_f, text="FLUIDSYNTH SETTINGS", bg=BG_COLOR, fg="#00FFFF", font=("Arial", 12, "bold")).pack(side="left")
+    tk.Checkbutton(fs_header_f, text="ENABLE", variable=fs_enabled_var, command=toggle_fluidsynth, bg=BG_COLOR, fg="#00FFFF", selectcolor="black", font=FONT_MAIN, takefocus=0).pack(side="right")
     
     dir_f = tk.Frame(main_p, bg=BG_COLOR)
     dir_f.pack(fill="x", pady=10)
-    make_label(dir_f, text="DIRECTORY:").pack(side="left")
-    fs_popup.sf_dir_entry = tk.Entry(dir_f, textvariable=sf_dir_var, font=FONT_MAIN, bg="#222222", fg="white", width=40)
-    fs_popup.sf_dir_entry.pack(side="left", padx=5)
+    make_label(dir_f, text="SF2 DIR:").pack(side="left")
+    config_popup.sf_dir_entry = tk.Entry(dir_f, textvariable=sf_dir_var, font=FONT_MAIN, bg="#222222", fg="white", width=40)
+    config_popup.sf_dir_entry.pack(side="left", padx=5)
     tk.Button(dir_f, text="BROWSE", command=browse_sf_directory, bg="#444444", fg="white", font=FONT_MAIN, relief="flat", takefocus=0).pack(side="left")
     
     grid_f = tk.Frame(main_p, bg=BG_COLOR)
-    grid_f.pack(fill="x", pady=20)
+    grid_f.pack(fill="x", pady=10)
     
     labels = ["MELODY SF2:", "HARMONY SF2:", "CHORDS SF2:", "BASS SF2:"]
-    fs_popup.sf_combos = []
+    config_popup.sf_combos = []
     
     for i in range(4):
         row, col = i // 2, i % 2
@@ -1270,12 +1323,15 @@ def show_fluidsynth_popup():
         
         cb = ttk.Combobox(f, textvariable=sf_dropdown_vars[i], values=available_sfs, state="readonly", width=25, font=FONT_MAIN)
         cb.pack(side="left", padx=5)
-        fs_popup.sf_combos.append(cb)
+        config_popup.sf_combos.append(cb)
         
         # Reload on selection change
         sf_dropdown_vars[i].trace_add("write", lambda *args, idx=i: [init_fluidsynth() if fs_enabled_var.get() else None])
 
-    tk.Button(main_p, text="CLOSE", command=fs_popup.destroy, bg="#333333", fg="white", font=FONT_MAIN, width=15, relief="flat").pack(pady=10)
+    tk.Button(main_p, text="CLOSE", command=config_popup.destroy, bg="#333333", fg="white", font=FONT_MAIN, width=15, relief="flat").pack(pady=20)
+    
+    # Initialize port lists
+    refresh_midi_ports()
 
 def browse_sf_directory():
     path = filedialog.askdirectory()
@@ -1479,25 +1535,8 @@ make_label(bf_r2, text="BSS GATE %:").pack(side="left")
 bas_gate_slider = tk.Scale(bf_r2, from_=10, to=100, orient="horizontal", bg=BG_COLOR, fg=FG_COLOR, highlightthickness=0, font=FONT_MAIN, takefocus=0, length=120)
 bas_gate_slider.set(100); bas_gate_slider.pack(side="left", padx=5)
 
-sync_routing_frame = tk.Frame(col_right, bg=BG_COLOR)
-sync_routing_frame.pack(fill="x", pady=5)
-make_label(sync_routing_frame, text="MIDI OUT:").grid(row=0, column=0, sticky="w", pady=2)
-midi_out_dropdown = ttk.Combobox(sync_routing_frame, textvariable=midi_out_var, state="readonly", width=18, height=20, font=FONT_MAIN)
-midi_out_dropdown.grid(row=0, column=1, padx=5, pady=2)
-make_label(sync_routing_frame, text="MIDI IN:").grid(row=1, column=0, sticky="w", pady=2)
-midi_in_dropdown = ttk.Combobox(sync_routing_frame, textvariable=midi_in_var, state="readonly", width=18, height=20, font=FONT_MAIN)
-midi_in_dropdown.grid(row=1, column=1, padx=5, pady=2)
-tk.Button(sync_routing_frame, text="REFRESH", command=refresh_midi_ports, bg="#333333", fg=FG_COLOR, font=FONT_MAIN, relief="flat", takefocus=0).grid(row=0, column=2, rowspan=2, padx=10)
-
-tk.Radiobutton(sync_routing_frame, text="INTERNAL CLOCK", variable=sync_var, value="Internal", bg=BG_COLOR, fg=FG_COLOR, selectcolor="black", font=FONT_MAIN, takefocus=0).grid(row=0, column=3, sticky="w", padx=10)
-tk.Radiobutton(sync_routing_frame, text="EXTERNAL CLOCK", variable=sync_var, value="External", bg=BG_COLOR, fg=FG_COLOR, selectcolor="black", font=FONT_MAIN, takefocus=0).grid(row=1, column=3, sticky="w", padx=10)
-tk.Label(sync_routing_frame, textvariable=ext_bpm_var, bg=BG_COLOR, fg="#FFC107", font=FONT_MAIN).grid(row=1, column=4, sticky="w")
-
-# FluidSynth Enable & Config
-fs_mini_f = tk.Frame(main_frame, bg=BG_COLOR)
-fs_mini_f.pack(fill="x", pady=5)
-tk.Checkbutton(fs_mini_f, text="ENABLE FLUIDSYNTH", variable=fs_enabled_var, command=toggle_fluidsynth, bg=BG_COLOR, fg="#00FFFF", selectcolor="black", font=FONT_MAIN, takefocus=0).pack(side="left")
-tk.Button(fs_mini_f, text="CONFIG", command=show_fluidsynth_popup, bg="#333333", fg="#00FFFF", font=FONT_MAIN, relief="flat", takefocus=0).pack(side="left", padx=10)
+# --- MIDI & SYNTH CONFIG ---
+tk.Button(col_right, text="MIDI & SYNTH CONFIG", command=show_config_popup, bg="#333333", fg="#00FFFF", font=FONT_TITLE, relief="flat", takefocus=0, pady=10).pack(fill="x", pady=5)
 
 # --- FOOTER: PLAYBACK & PIANO ROLL ---
 piano_roll_frame = tk.Frame(main_frame, bg="#111111", bd=2, relief="sunken", padx=2, pady=2)
