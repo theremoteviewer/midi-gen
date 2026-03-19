@@ -117,7 +117,8 @@ def save_settings():
             "workflow_var": workflow_var.get(),
             "lock_notes_var": lock_notes_var.get(),
             "fs_enabled_var": fs_enabled_var.get(),
-            "sf_path_vars": [v.get() for v in sf_path_vars],
+            "sf_dir_var": sf_dir_var.get(),
+            "sf_dropdown_vars": [v.get() for v in sf_dropdown_vars],
             "tempo_slider": tempo_slider.get(),
             "complexity_slider": complexity_slider.get(),
             "vel_slider": vel_slider.get(),
@@ -177,10 +178,23 @@ def load_settings():
         if "lock_notes_var" in settings: lock_notes_var.set(settings["lock_notes_var"])
         if "fs_enabled_var" in settings: fs_enabled_var.set(settings["fs_enabled_var"])
         
-        if "sf_path_vars" in settings:
-            for i, val in enumerate(settings["sf_path_vars"]):
-                if i < len(sf_path_vars): sf_path_vars[i].set(val)
+        if "sf_dir_var" in settings: sf_dir_var.set(settings["sf_dir_var"])
+        if "sf_dropdown_vars" in settings:
+            for i, val in enumerate(settings["sf_dropdown_vars"]):
+                if i < len(sf_dropdown_vars): sf_dropdown_vars[i].set(val)
         
+        # Migration from old format
+        if "sf_path_vars" in settings and not settings.get("sf_dir_var"):
+            paths = settings["sf_path_vars"]
+            if paths and any(paths):
+                first_path = next((p for p in paths if p and os.path.exists(p)), None)
+                if first_path:
+                    sf_dir_var.set(os.path.dirname(first_path))
+                    refresh_soundfont_list()
+                    for i, p in enumerate(paths):
+                        if p and i < 4:
+                            sf_dropdown_vars[i].set(os.path.basename(p))
+
         if "tempo_slider" in settings: tempo_slider.set(settings["tempo_slider"])
         if "complexity_slider" in settings: complexity_slider.set(settings["complexity_slider"])
         if "vel_slider" in settings: vel_slider.set(settings["vel_slider"])
@@ -284,7 +298,9 @@ workflow_var, lock_notes_var = tk.StringVar(value="Instant"), tk.BooleanVar(valu
 
 # FluidSynth Variables
 fs_enabled_var = tk.BooleanVar(value=False)
-sf_path_vars = [tk.StringVar(value="Select SoundFont...") for _ in range(4)]
+sf_dir_var = tk.StringVar(value="Select SoundFont Directory...")
+sf_dropdown_vars = [tk.StringVar(value="None") for _ in range(4)]
+available_sfs = []
 fs_instance = None
 fs_sfids = [None] * 4
 
@@ -1184,6 +1200,34 @@ def on_closing():
         except: pass
     app.after(500, app.destroy)
 
+def refresh_soundfont_list():
+    global available_sfs
+    dir_path = sf_dir_var.get()
+    available_sfs = ["None"]
+    if os.path.isdir(dir_path):
+        try:
+            files = [f for f in os.listdir(dir_path) if f.lower().endswith(".sf2")]
+            available_sfs.extend(sorted(files))
+        except Exception as e:
+            print(f"Error scanning SoundFont directory: {e}")
+    
+    for var in sf_dropdown_vars:
+        if var.get() not in available_sfs:
+            var.set("None")
+            
+    # Update all comboboxes
+    for i in range(4):
+        if 'sf_combos' in globals() and sf_combos[i]:
+            sf_combos[i]['values'] = available_sfs
+
+def browse_sf_directory():
+    path = filedialog.askdirectory()
+    if path:
+        sf_dir_var.set(path)
+        refresh_soundfont_list()
+        if fs_enabled_var.get():
+            init_fluidsynth()
+
 def init_fluidsynth():
     global fs_instance, fs_sfids
     if not FLUIDSYNTH_AVAILABLE:
@@ -1202,14 +1246,14 @@ def init_fluidsynth():
         fs_sfids = [None] * 4
         any_loaded = False
         for i in range(4):
-            path = sf_path_vars[i].get()
-            if os.path.exists(path):
-                sfid = fs_instance.sfload(path)
-                fs_sfids[i] = sfid
-                # Map internal channel i to this soundfont
-                # Note: internal channels 0, 1, 2, 3 correspond to Mel, Hrm, Chd, Bas
-                fs_instance.program_select(i, sfid, 0, 0)
-                any_loaded = True
+            sf_name = sf_dropdown_vars[i].get()
+            if sf_name and sf_name != "None":
+                path = os.path.join(sf_dir_var.get(), sf_name)
+                if os.path.exists(path):
+                    sfid = fs_instance.sfload(path)
+                    fs_sfids[i] = sfid
+                    fs_instance.program_select(i, sfid, 0, 0)
+                    any_loaded = True
         
         if any_loaded:
             update_status("FLUIDSYNTH READY", FG_COLOR)
@@ -1220,13 +1264,6 @@ def init_fluidsynth():
         messagebox.showerror("FluidSynth Error", f"Failed to initialize: {e}")
         fs_enabled_var.set(False)
         fs_instance = None
-
-def select_soundfont(idx):
-    path = filedialog.askopenfilename(filetypes=[("SoundFont files", "*.sf2")])
-    if path:
-        sf_path_vars[idx].set(path)
-        if fs_enabled_var.get():
-            init_fluidsynth()
 
 def toggle_fluidsynth():
     if fs_enabled_var.get():
@@ -1398,20 +1435,36 @@ tk.Radiobutton(sync_routing_frame, text="INTERNAL CLOCK", variable=sync_var, val
 tk.Radiobutton(sync_routing_frame, text="EXTERNAL CLOCK", variable=sync_var, value="External", bg=BG_COLOR, fg=FG_COLOR, selectcolor="black", font=FONT_MAIN, takefocus=0).grid(row=1, column=3, sticky="w", padx=10)
 tk.Label(sync_routing_frame, textvariable=ext_bpm_var, bg=BG_COLOR, fg="#FFC107", font=FONT_MAIN).grid(row=1, column=4, sticky="w")
 
-fs_frame = tk.LabelFrame(main_frame, text=" FLUIDSYNTH MULTI-SOUNDFONT ", bg=BG_COLOR, fg="#00FFFF", font=FONT_TITLE, padx=10, pady=5)
+fs_frame = tk.LabelFrame(main_frame, text=" FLUIDSYNTH SETTINGS ", bg=BG_COLOR, fg="#00FFFF", font=FONT_TITLE, padx=10, pady=5)
 fs_frame.pack(fill="x", pady=5)
-fs_top = tk.Frame(fs_frame, bg=BG_COLOR); fs_top.pack(fill="x")
-tk.Checkbutton(fs_top, text="ENABLE FLUIDSYNTH", variable=fs_enabled_var, command=toggle_fluidsynth, bg=BG_COLOR, fg="#00FFFF", selectcolor="black", font=FONT_MAIN, takefocus=0).pack(side="left")
+
+fs_controls = tk.Frame(fs_frame, bg=BG_COLOR)
+fs_controls.pack(fill="x", pady=2)
+tk.Checkbutton(fs_controls, text="ENABLE FLUIDSYNTH", variable=fs_enabled_var, command=toggle_fluidsynth, bg=BG_COLOR, fg="#00FFFF", selectcolor="black", font=FONT_MAIN, takefocus=0).pack(side="left")
+
+tk.Frame(fs_controls, width=20, bg=BG_COLOR).pack(side="left")
+make_label(fs_controls, text="DIRECTORY:").pack(side="left")
+tk.Entry(fs_controls, textvariable=sf_dir_var, font=FONT_MAIN, bg="#222222", fg="white", width=50).pack(side="left", padx=5)
+tk.Button(fs_controls, text="BROWSE", command=browse_sf_directory, bg="#444444", fg="white", font=FONT_MAIN, relief="flat", takefocus=0).pack(side="left")
 
 fs_grid = tk.Frame(fs_frame, bg=BG_COLOR); fs_grid.pack(fill="x", pady=5)
 labels = ["MEL SF2:", "HRM SF2:", "CHD SF2:", "BAS SF2:"]
+sf_combos = []
+
 for i in range(4):
     row = i // 2
     col = i % 2
     f = tk.Frame(fs_grid, bg=BG_COLOR); f.grid(row=row, column=col, sticky="w", padx=10, pady=2)
     make_label(f, text=labels[i], width=8, anchor="w").pack(side="left")
-    tk.Entry(f, textvariable=sf_path_vars[i], font=FONT_MAIN, bg="#222222", fg="white", width=40).pack(side="left", padx=5)
-    tk.Button(f, text="...", command=lambda idx=i: select_soundfont(idx), bg="#444444", fg="white", font=FONT_MAIN, relief="flat", takefocus=0).pack(side="left")
+    
+    cb = ttk.Combobox(f, textvariable=sf_dropdown_vars[i], values=available_sfs, state="readonly", width=35, font=FONT_MAIN)
+    cb.pack(side="left", padx=5)
+    sf_combos.append(cb)
+    
+    # Trigger reload on selection change
+    sf_dropdown_vars[i].trace_add("write", lambda *args, idx=i: [init_fluidsynth() if fs_enabled_var.get() else None])
+
+refresh_soundfont_list()
 
 # --- FOOTER: PLAYBACK & PIANO ROLL ---
 piano_roll_frame = tk.Frame(main_frame, bg="#111111", bd=2, relief="sunken", padx=2, pady=2)
