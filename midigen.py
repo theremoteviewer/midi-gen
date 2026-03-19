@@ -143,8 +143,9 @@ workflow_var, lock_notes_var = tk.StringVar(value="Instant"), tk.BooleanVar(valu
 
 # FluidSynth Variables
 fs_enabled_var = tk.BooleanVar(value=False)
-sf_path_var = tk.StringVar(value="Select SoundFont...")
+sf_path_vars = [tk.StringVar(value="Select SoundFont...") for _ in range(4)]
 fs_instance = None
+fs_sfids = [None] * 4
 
 # ==========================================
 # PHASE 4: LOGIC & GENERATOR FUNCTIONS
@@ -1041,39 +1042,46 @@ def on_closing():
     app.after(500, app.destroy)
 
 def init_fluidsynth():
-    global fs_instance
+    global fs_instance, fs_sfids
     if not FLUIDSYNTH_AVAILABLE:
         messagebox.showerror("FluidSynth Error", "pyfluidsynth not installed")
         fs_enabled_var.set(False)
         return
     
-    sf_path = sf_path_var.get()
-    if not os.path.exists(sf_path):
-        messagebox.showerror("FluidSynth Error", "SoundFont file not found")
-        fs_enabled_var.set(False)
-        return
-
     try:
         if fs_instance:
             fs_instance.delete()
         
         fs_instance = fluidsynth.Synth()
-        # Default driver for macOS/Linux/Windows
         driver = 'coreaudio' if sys.platform == 'darwin' else ('dsound' if sys.platform == 'win32' else 'alsa')
         fs_instance.start(driver=driver)
         
-        sfid = fs_instance.sfload(sf_path)
-        fs_instance.program_select(0, sfid, 0, 0)
-        update_status("FLUIDSYNTH READY", FG_COLOR)
+        fs_sfids = [None] * 4
+        any_loaded = False
+        for i in range(4):
+            path = sf_path_vars[i].get()
+            if os.path.exists(path):
+                sfid = fs_instance.sfload(path)
+                fs_sfids[i] = sfid
+                # Map internal channel i to this soundfont
+                # Note: internal channels 0, 1, 2, 3 correspond to Mel, Hrm, Chd, Bas
+                fs_instance.program_select(i, sfid, 0, 0)
+                any_loaded = True
+        
+        if any_loaded:
+            update_status("FLUIDSYNTH READY", FG_COLOR)
+        else:
+            update_status("FLUIDSYNTH: NO SOUNDFONTS LOADED", "#FFC107")
+
     except Exception as e:
         messagebox.showerror("FluidSynth Error", f"Failed to initialize: {e}")
         fs_enabled_var.set(False)
         fs_instance = None
 
-def select_soundfont():
+def select_soundfont(idx):
     path = filedialog.askopenfilename(filetypes=[("SoundFont files", "*.sf2")])
     if path:
-        sf_path_var.set(path)
+        sf_path_vars[idx].set(path)
         if fs_enabled_var.get():
             init_fluidsynth()
 
@@ -1247,12 +1255,20 @@ tk.Radiobutton(sync_routing_frame, text="INTERNAL CLOCK", variable=sync_var, val
 tk.Radiobutton(sync_routing_frame, text="EXTERNAL CLOCK", variable=sync_var, value="External", bg=BG_COLOR, fg=FG_COLOR, selectcolor="black", font=FONT_MAIN, takefocus=0).grid(row=1, column=3, sticky="w", padx=10)
 tk.Label(sync_routing_frame, textvariable=ext_bpm_var, bg=BG_COLOR, fg="#FFC107", font=FONT_MAIN).grid(row=1, column=4, sticky="w")
 
-fs_frame = tk.Frame(main_frame, bg=BG_COLOR, bd=1, relief="solid", padx=5, pady=5)
+fs_frame = tk.LabelFrame(main_frame, text=" FLUIDSYNTH MULTI-SOUNDFONT ", bg=BG_COLOR, fg="#00FFFF", font=FONT_TITLE, padx=10, pady=5)
 fs_frame.pack(fill="x", pady=5)
-tk.Checkbutton(fs_frame, text="ENABLE FLUIDSYNTH", variable=fs_enabled_var, command=toggle_fluidsynth, bg=BG_COLOR, fg="#00FFFF", selectcolor="black", font=FONT_MAIN, takefocus=0).pack(side="left", padx=10)
-make_label(fs_frame, text="SOUNDFONT:").pack(side="left")
-tk.Entry(fs_frame, textvariable=sf_path_var, font=FONT_MAIN, bg="#222222", fg="white", width=60).pack(side="left", padx=5)
-tk.Button(fs_frame, text="...", command=select_soundfont, bg="#444444", fg="white", font=FONT_MAIN, relief="flat", takefocus=0).pack(side="left", padx=2)
+fs_top = tk.Frame(fs_frame, bg=BG_COLOR); fs_top.pack(fill="x")
+tk.Checkbutton(fs_top, text="ENABLE FLUIDSYNTH", variable=fs_enabled_var, command=toggle_fluidsynth, bg=BG_COLOR, fg="#00FFFF", selectcolor="black", font=FONT_MAIN, takefocus=0).pack(side="left")
+
+fs_grid = tk.Frame(fs_frame, bg=BG_COLOR); fs_grid.pack(fill="x", pady=5)
+labels = ["MEL SF2:", "HRM SF2:", "CHD SF2:", "BAS SF2:"]
+for i in range(4):
+    row = i // 2
+    col = i % 2
+    f = tk.Frame(fs_grid, bg=BG_COLOR); f.grid(row=row, column=col, sticky="w", padx=10, pady=2)
+    make_label(f, text=labels[i], width=8, anchor="w").pack(side="left")
+    tk.Entry(f, textvariable=sf_path_vars[i], font=FONT_MAIN, bg="#222222", fg="white", width=40).pack(side="left", padx=5)
+    tk.Button(f, text="...", command=lambda idx=i: select_soundfont(idx), bg="#444444", fg="white", font=FONT_MAIN, relief="flat", takefocus=0).pack(side="left")
 
 # --- FOOTER: PLAYBACK & PIANO ROLL ---
 piano_roll_frame = tk.Frame(main_frame, bg="#111111", bd=2, relief="sunken", padx=2, pady=2)
