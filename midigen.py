@@ -1,3 +1,5 @@
+from pathlib import Path
+
 try:
     import rtmidi
 except ImportError:
@@ -89,10 +91,11 @@ def get_resource_path(rel_path):
 CONFIG_DIR = platformdirs.user_config_dir("midigen", "the_passenger")
 CONFIG_FILE = os.path.join(CONFIG_DIR, "settings.json")
 
-def save_settings():
+def save_settings(config_file):
     try:
-        if not os.path.exists(CONFIG_DIR):
-            os.makedirs(CONFIG_DIR)
+        config_dir = Path(config_file).parent
+        if not os.path.exists(config_dir):
+            os.makedirs(config_dir)
         
         settings = {
             "style_var": style_var.get(),
@@ -140,19 +143,19 @@ def save_settings():
             "solo_bas_var": solo_bas_var.get()
         }
         
-        with open(CONFIG_FILE, 'w') as f:
+        with open(config_file, 'w') as f:
             json.dump(settings, f, indent=4)
 
-        print(f"Saved settings to {CONFIG_FILE}")
+        print(f"Saved settings to {config_file}")
     except Exception as e:
         print(f"Failed to save settings: {e}")
 
-def load_settings():
+def load_settings(config_file):
     try:
-        if not os.path.exists(CONFIG_FILE):
+        if not os.path.exists(config_file):
             return
         
-        with open(CONFIG_FILE, 'r') as f:
+        with open(config_file, 'r') as f:
             settings = json.load(f)
             
         if "style_var" in settings: style_var.set(settings["style_var"])
@@ -1211,7 +1214,7 @@ def on_closing():
     global is_playing, fs_instance, config_popup
     is_playing = False
 
-    save_settings()
+    save_settings(CONFIG_FILE)
     panic_action()
     if config_popup:
         try: config_popup.destroy()
@@ -1621,7 +1624,7 @@ for i in range(matrix_density_canvas):
 draw_piano_keyboard()
 on_composer_change()
 refresh_midi_ports()
-load_settings()
+load_settings(CONFIG_FILE)
 generate_action(force_new=True)
 
 app.after(50, update_visualizer)
