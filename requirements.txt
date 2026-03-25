@@ -1,0 +1,6 @@
+mido==1.3.3
+numpy==2.4.3
+packaging==26.0
+platformdirs==4.9.4
+pyfluidsynth==1.3.4
+rtmidi2==1.4.0
